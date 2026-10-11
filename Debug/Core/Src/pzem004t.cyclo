@@ -1,0 +1,12 @@
+../Core/Src/pzem004t.c:10:17:calculateCRC	4
+../Core/Src/pzem004t.c:27:13:sendReceive	16
+../Core/Src/pzem004t.c:134:6:PZEM_Init	1
+../Core/Src/pzem004t.c:142:13:readRegisters	1
+../Core/Src/pzem004t.c:159:6:PZEM_ReadAll	1
+../Core/Src/pzem004t.c:164:7:PZEM_Voltage	1
+../Core/Src/pzem004t.c:170:7:PZEM_Current	1
+../Core/Src/pzem004t.c:179:7:PZEM_Power	1
+../Core/Src/pzem004t.c:188:7:PZEM_Energy	1
+../Core/Src/pzem004t.c:197:7:PZEM_Frequency	1
+../Core/Src/pzem004t.c:203:7:PZEM_PowerFactor	1
+../Core/Src/pzem004t.c:209:6:PZEM_ResetEnergy	1

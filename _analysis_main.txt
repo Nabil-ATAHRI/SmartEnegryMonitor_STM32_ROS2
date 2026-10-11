@@ -1,0 +1,220 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include "pzem004t.h"
+#include <stdio.h>
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+#define POLL_INTERVAL 500  // Poll PZEM every 500ms (2 Hz update rate)
+#define MAX_RETRIES   3    // Retry count for failed PZEM reads
+#define STARTUP_ATTEMPTS 5 // Attempts to detect PZEM on boot
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart3;
+
+/* USER CODE BEGIN PV */
+PZEM_t pzem;
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_USART1_UART_Init(void);
+static void MX_USART2_UART_Init(void);
+static void MX_USART3_UART_Init(void);
+/* USER CODE BEGIN PFP */
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+// Printf to USART1 (PA9-TX) for debug output
+int _write(int file, char *ptr, int len) {
+    HAL_UART_Transmit(&huart3, (uint8_t*)ptr, len, HAL_MAX_DELAY);
+    return len;
+}
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART1_UART_Init();
+  MX_USART2_UART_Init();
+  MX_USART3_UART_Init();
+  /* USER CODE BEGIN 2 */
+  printf("\r\n============================================\r\n");
+  printf("=== STM32 PZEM004T Energy Monitor ===\r\n");
+  printf("============================================\r\n");
+  printf("USART3: PB10(TX) PB11(RX) @ 9600 8N1\r\n");
+  printf("USART1: PA9(TX) @ 115200 (Debug)\r\n");
+  printf("PZEM Address: 0x01\r\n");
+  printf("Using raw register polling (proven method)\r\n");
+  printf("============================================\r\n\r\n");
+
+  // Initialize PZEM
+  PZEM_Init(&pzem, &huart2, 0x01);
+  printf("PZEM initialized\r\n");
+
+  // Startup: verify PZEM is responding at address 0x01
+  printf("Checking PZEM at address 0x%02X...\r\n", pzem.addr);
+  bool pzem_found = false;
+  for (uint8_t attempt = 1; attempt <= STARTUP_ATTEMPTS; attempt++) {
+      if (PZEM_ReadAll(&pzem)) {
+          printf("PZEM detected on attempt %d! Voltage: %.1fV\r\n", attempt, PZEM_Voltage(&pzem));
+          pzem_found = true;
+          break;
+      }
+      printf("  Attempt %d/%d failed, retrying...\r\n", attempt, STARTUP_ATTEMPTS);
+      HAL_Delay(500);
+  }
+
+  if (!pzem_found) {
+      printf("WARNING: PZEM not responding! Check wiring and address.\r\n");
+  }
+
+  // Reset energy counter on startup for per-session tracking
+  if (pzem_found) {
+      if (PZEM_ResetEnergy(&pzem)) {
+          printf("Energy counter reset to 0\r\n");
+      } else {
+          printf("WARNING: Energy reset failed\r\n");
+      }
+  }
+
+  // Start Independent Watchdog (IWDG) — ~4 second timeout
+  // LSI ~40kHz, prescaler /64 = 625 Hz, reload 2500 = 4 sec
+  IWDG->KR  = 0x5555;  // Enable write access
+  IWDG->PR  = 4;       // Prescaler /64
+  IWDG->RLR = 2500;    // Reload value
+  IWDG->KR  = 0xCCCC;  // Start IWDG
+  printf("Watchdog started (~4s timeout)\r\n");
+
+  printf("Polling every %d ms...\r\n\r\n", POLL_INTERVAL);
+  /* USER CODE END 2 */
+  uint32_t lastPoll = 0;
+  uint32_t consecutiveFails = 0;
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
+	    uint32_t now = HAL_GetTick();
+
+	    if (now - lastPoll >= POLL_INTERVAL) {
+	        lastPoll = now;
+
+	        // Read all PZEM values with retry logic
+	        bool read_ok = false;
+	        for (uint8_t retry = 0; retry < MAX_RETRIES; retry++) {
+	            if (PZEM_ReadAll(&pzem)) {
+	                read_ok = true;
+	                break;
+	            }
+	        }
+
+	        if (read_ok) {
+	            consecutiveFails = 0;
+
+	            // Parse cached values (no additional blocking)
+	            float voltage = PZEM_Voltage(&pzem);
+	            float current = PZEM_Current(&pzem);
+	            float power = PZEM_Power(&pzem);
+	            float energy = PZEM_Energy(&pzem);
+	            float frequency = PZEM_Frequency(&pzem);
+	            float pf = PZEM_PowerFactor(&pzem);
+
+	            // Print readable results with timestamp
+	            printf("[%lu ms] Voltage: %.1fV | Current: %.3fA | Power: %.1fW | Energy: %.3fkWh | Freq: %.1fHz | PF: %.2f\r\n",
+	                   now, voltage, current, power, energy, frequency, pf);
+	        } else {
+	            consecutiveFails++;
+	            printf("[%lu ms] PZEM Read FAILED after %d retries (consecutive failures: %lu)\r\n",
+	                   now, MAX_RETRIES, consecutiveFails);
+	        }
+	    }
+
+	    // Feed watchdog — must be called within ~4s or MCU resets
+	    IWDG->KR = 0xAAAA;
+    /* USER CODE BEGIN 3 */
+  }
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /** Configure the main internal regulator output voltage
+  */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */

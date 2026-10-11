@@ -1,0 +1,9 @@
+../Core/Src/main.c:67:5:__io_putchar	1
+../Core/Src/main.c:74:13:SendPzemToRaspberry	6
+../Core/Src/main.c:108:5:main	9
+../Core/Src/main.c:231:6:SystemClock_Config	3
+../Core/Src/main.c:278:13:MX_UART4_Init	2
+../Core/Src/main.c:311:13:MX_USART1_UART_Init	2
+../Core/Src/main.c:344:13:MX_USART2_UART_Init	2
+../Core/Src/main.c:377:13:MX_GPIO_Init	1
+../Core/Src/main.c:399:6:Error_Handler	1
